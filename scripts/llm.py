@@ -25,6 +25,7 @@ def classify_news_items(
     *,
     location_id: str,
     geo_terms: Iterable[str] | None = None,
+    locality: Dict[str, str] | None = None,
     max_items: int = 10,
     model: str | None = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
@@ -42,6 +43,7 @@ def classify_news_items(
     payload = {
         "location": location_id,
         "geo_terms": list(geo_terms or []),
+        "locality": locality or {},
         "items": [
             {
                 "title": (i.get("title") or "")[:200],
@@ -56,13 +58,12 @@ def classify_news_items(
 
     system = (
         "You are a risk triage analyst for emergency preparedness."
-        " Classify news items as PREPPER_RELEVANT if they indicate immediate or near-term"
-        " situational threats requiring awareness or action, such as:"
-        " disasters (wildfire, flood, quake), severe weather, civil unrest/violence,"
-        " infrastructure outages (power/water/transport), hazmat/chemical spill,"
-        " supply chain shortages/panic buying, public health emergencies."
-        " Prefer high precision: avoid general interest, politics, sports, finance"
-        " unless there is a concrete, local, urgent impact."
+        " Only mark items PREPPER_RELEVANT when BOTH conditions are met:"
+        " (1) Hazard: clear near-term threat or impact (disaster, severe weather, civil unrest/violence,"
+        " infrastructure outage, hazmat/chemical spill, evacuation/shelter-in-place, lockdown, major road closure,"
+        " public health emergency)."
+        " (2) Locality: specifically pertains to the provided city or county; state-wide or state-only mentions are insufficient."
+        " Always exclude sports, entertainment, routine politics, finance, human interest, and general features unless they contain a concrete hazard + locality."
         " Output strict JSON: {\"results\":[{title, link, domain, relevant:bool, category, reason, severity:int}]}"
         " where severity is 1 (info), 2 (watch), 3 (warning)."
     )
@@ -70,10 +71,14 @@ def classify_news_items(
     user = (
         "Location: {location}\n\n"
         "Geo terms (hints): {geo_terms}\n\n"
+        "Locality: city={city}, county={county}, state_code={state_code}\n\n"
         "Items:\n{items}"
     ).format(
         location=payload["location"],
         geo_terms=", ".join(payload["geo_terms"]),
+        city=(payload["locality"].get("city") or ""),
+        county=(payload["locality"].get("county") or ""),
+        state_code=(payload["locality"].get("state_code") or ""),
         items=json.dumps(payload["items"], ensure_ascii=False),
     )
 

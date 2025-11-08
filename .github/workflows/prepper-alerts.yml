@@ -25,6 +25,8 @@ jobs:
       LLM_MAX_ITEMS: '6'
       LLM_MAX_CHARS: '1000'
       LLM_EMIT_ALERTS: '1'
+      LLM_MIN_SEVERITY: '3'
+      LLM_CONFIRM_MIN_SEVERITY: '2'
     steps:
       - uses: actions/checkout@v4
         with:

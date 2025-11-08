@@ -159,6 +159,14 @@ class PrepperAlertsRunner:
         except ValueError:
             self.llm_max_chars = 1000
         self.llm_emit_alerts = os.getenv("LLM_EMIT_ALERTS", "").strip().lower() in {"1", "true", "yes", "on"}
+        try:
+            self.llm_min_severity = int(os.getenv("LLM_MIN_SEVERITY", "3"))
+        except ValueError:
+            self.llm_min_severity = 3
+        try:
+            self.llm_confirm_min_severity = int(os.getenv("LLM_CONFIRM_MIN_SEVERITY", "2"))
+        except ValueError:
+            self.llm_confirm_min_severity = 2
 
     def _build_sources(self, news_stack, allow_domains: Iterable[str]):
         return {
@@ -216,25 +224,37 @@ class PrepperAlertsRunner:
                         enriched,
                         location_id=location.id,
                         geo_terms=(keywords or {}).get("geo_terms", []),
+                        locality=(keywords or {}).get("metadata", {}),
                         max_items=self.llm_max_items,
                     )
                 except Exception as err:  # pragma: no cover
                     filtered, meta = [], {"used": True, "error": str(err)}
+                # Post-filter: require locality match with specific tokens and severity threshold
+                accepted: List[Dict[str, Any]] = []
+                for i in filtered:
+                    sev = int(i.get("severity") or 1)
+                    if sev < self.llm_confirm_min_severity:
+                        continue
+                    if not self._geo_specific_match(i, keywords or {}):
+                        continue
+                    accepted.append(i)
                 llm_result = SourceResult(
                     provider="llm_news",
                     location_id=location.id,
-                    items=filtered,
+                    items=accepted,
                     ok=True,
-                    error=None if filtered else "no_relevant_items",
+                    error=None if accepted else "no_relevant_items",
                     latency_ms=None,
                 )
                 self.summary.record_source(llm_result)
                 self.metrics.record_fetch(self.summary.run_id, llm_result)
-                if filtered:
+                if accepted:
                     self.signals.record_confirmation(location.id, "llm_news")
                     if self.llm_emit_alerts:
-                        for i in filtered:
+                        for i in accepted:
                             sev = int(i.get("severity") or 1)
+                            if sev < self.llm_min_severity:
+                                continue
                             priority = 2 if sev >= 3 else 1
                             title = f"[{location.id.upper()}] {i.get('title','News item')}"
                             body = normalize_ascii(i.get("content") or i.get("summary") or i.get("title") or "")
@@ -261,6 +281,31 @@ class PrepperAlertsRunner:
                 decision = self._decision_from_usgs(location.id, item)
                 if decision:
                     self._emit_if_needed(decision)
+
+    def _geo_specific_match(self, item: Dict[str, Any], keywords: Dict[str, Any]) -> bool:
+        """Return True if the item text contains a specific local token (city/county/road), not just state/state code.
+
+        Falls back to True if no metadata available, to avoid false negatives.
+        """
+        meta = (keywords or {}).get("metadata", {})
+        city = (meta.get("city") or "").lower()
+        county = (meta.get("county") or "").lower()
+        state = (meta.get("state") or "").lower()
+        state_code = (meta.get("state_code") or "").lower()
+        roads = [r.lower() for r in (keywords or {}).get("roads", [])]
+        text = " ".join([(item.get("title") or ""), (item.get("summary") or ""), (item.get("content") or "")]).lower()
+        specific_tokens = {t for t in [city, county] if t}
+        specific_tokens.update([r for r in roads if r])
+        if not specific_tokens:
+            return True
+        if any(tok and tok in text for tok in specific_tokens):
+            return True
+        # If only state/state_code found, treat as not specific
+        if state and state in text:
+            return False
+        if state_code and state_code.lower() in text:
+            return False
+        return False
         self.state.save()
         self.summary.write()
         ended_at = utcnow()

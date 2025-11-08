@@ -86,6 +86,8 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    export LLM_MAX_ITEMS=10           # cap items per location (optional)
    export LLM_MAX_CHARS=1000         # cap full-text chars per item (optional)
    export LLM_EMIT_ALERTS=1          # emit alerts from LLM-accepted items (optional)
+   export LLM_MIN_SEVERITY=3         # only emit alerts for severity >= 3
+   export LLM_CONFIRM_MIN_SEVERITY=2 # only count toward confirmation if severity >= 2
    
    python -m scripts.cli rebuild-keywords
    python -m scripts.prepper_alerts --dry-run
