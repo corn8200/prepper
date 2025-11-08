@@ -19,12 +19,24 @@ GOOGLE_NEWS_SEARCH = "https://news.google.com/rss/search"
 class NewsRSSClient(BaseSource):
     provider = "news_rss"
 
-    def __init__(self, rss_feeds: Iterable[str], allow_domains: Iterable[str], google_queries: Iterable[str], hazard_keywords: Iterable[str] | None = None) -> None:
+    def __init__(
+        self,
+        rss_feeds: Iterable[str],
+        allow_domains: Iterable[str],
+        google_queries: Iterable[str],
+        hazard_keywords: Iterable[str] | None = None,
+        require_hazard_default: bool = True,
+    ) -> None:
         self.rss_feeds = list(rss_feeds)
         self.allow_domains = {domain.lower() for domain in allow_domains}
         self.google_queries = list(google_queries)
         self.hazard_keywords = [h.lower() for h in (hazard_keywords or [])]
-        self.require_hazard = (os.getenv("NEWS_REQUIRE_HAZARD", "1").strip().lower() in {"1", "true", "yes", "on"}) and bool(self.hazard_keywords)
+        env_flag = os.getenv("NEWS_REQUIRE_HAZARD")
+        if env_flag is None:
+            require_flag = require_hazard_default
+        else:
+            require_flag = env_flag.strip().lower() in {"1", "true", "yes", "on"}
+        self.require_hazard = bool(self.hazard_keywords) and require_flag
 
     def fetch(self, location: Dict[str, Any], keywords: Optional[Dict[str, Any]] = None) -> SourceResult:
         items: List[Dict[str, Any]] = []

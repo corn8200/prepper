@@ -6,7 +6,6 @@ import json
 import os
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from pathlib import Path
 import sys
 from typing import Any, Dict, Iterable, List
@@ -177,6 +176,7 @@ class PrepperAlertsRunner:
                 allow_domains,
                 news_stack.google_news_queries_per_location,
                 getattr(news_stack, "hazard_keywords", []),
+                getattr(news_stack, "require_hazard", True),
             ),
             "eonet": EONETClient(),
         }
@@ -192,7 +192,6 @@ class PrepperAlertsRunner:
             pending_nws: List[Dict[str, Any]] = []
             pending_usgs: List[Dict[str, Any]] = []
             news_surge_active = False
-            official_severe = False
             rss_items: List[Dict[str, Any]] = []
             for name, source in self.sources.items():
                 result = source.fetch(location_payload, keywords)
@@ -207,8 +206,6 @@ class PrepperAlertsRunner:
                     rss_items = result.items or []
                 if result.provider == "nws" and result.items:
                     pending_nws.extend(result.items)
-                    if any((item.get("severity") or "") in self.severe_thresholds for item in result.items):
-                        official_severe = True
                 if result.provider == "usgs" and result.items:
                     pending_usgs.extend(result.items)
             # Fetch full text and classify RSS items via LLM; treat accepted items as confirmation and optionally emit alerts
@@ -225,15 +222,15 @@ class PrepperAlertsRunner:
                     except Exception:
                         enriched = rss_items[: self.llm_max_items]
                 try:
-                    filtered, meta = classify_news_items(
+                    filtered, _ = classify_news_items(
                         enriched,
                         location_id=location.id,
                         geo_terms=(keywords or {}).get("geo_terms", []),
                         locality=(keywords or {}).get("metadata", {}),
                         max_items=self.llm_max_items,
                     )
-                except Exception as err:  # pragma: no cover
-                    filtered, meta = [], {"used": True, "error": str(err)}
+                except Exception:  # pragma: no cover
+                    filtered = []
                 # Post-filter: require locality match with specific tokens and severity threshold
                 accepted: List[Dict[str, Any]] = []
                 for i in filtered:
@@ -290,6 +287,17 @@ class PrepperAlertsRunner:
         self.state.save()
         self.summary.write()
         ended_at = utcnow()
+        meta_payload = {
+            "run_id": self.summary.run_id,
+            "run_number": None,
+            "head_sha": "",
+            "updated_at": ended_at.isoformat(),
+        }
+        meta_path = DATA_DIR / "latest_run.meta.json"
+        try:
+            meta_path.write_text(json.dumps(meta_payload, indent=2), encoding="utf-8")
+        except Exception as err:  # pragma: no cover - best effort
+            LOGGER.warning("Failed to write run meta: %s", err)
         self.metrics.record_run_end(self.summary.run_id, ended_at, (ended_at - self.run_started_at).total_seconds())
         self.metrics.close()
         self.signals.reset_run_state()

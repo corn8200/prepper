@@ -40,6 +40,7 @@ except ModuleNotFoundError:  # pragma: no cover - streamlit debugging context
 CONFIG_DIR = ROOT / "config"
 DATA_DIR = ROOT / "data"
 LATEST_RUN = DATA_DIR / "latest_run.json"
+LATEST_RUN_META = DATA_DIR / "latest_run.meta.json"
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
@@ -53,6 +54,23 @@ def read_latest_run() -> Dict:
 
 def save_yaml(path: Path, payload: Dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+
+def read_latest_run_meta() -> Dict:
+    if not LATEST_RUN_META.exists():
+        return {}
+    try:
+        return json.loads(LATEST_RUN_META.read_text())
+    except Exception:
+        return {}
+
+
+def write_latest_run_meta(meta: Dict) -> None:
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        LATEST_RUN_META.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    except Exception as err:  # pragma: no cover - best effort
+        LOGGER.warning("Failed to write meta: %s", err)
 
 
 def _detect_repo() -> tuple[str, str]:
@@ -255,6 +273,9 @@ def main() -> None:
     locations_payload = load_yaml(CONFIG_DIR / "locations.yaml")
     settings_payload = load_yaml(CONFIG_DIR / "settings.yaml")
     latest_run = read_latest_run()
+    run_meta = st.session_state.get("latest_run_meta") or read_latest_run_meta()
+    if run_meta:
+        st.session_state["latest_run_meta"] = run_meta
 
     sidebar(settings_payload)
 
@@ -270,7 +291,7 @@ def main() -> None:
         ]
     )
     with tabs[0]:
-        show_overview(latest_run)
+        show_overview(latest_run, run_meta)
     with tabs[1]:
         show_locations(locations_payload)
     with tabs[2]:
@@ -331,6 +352,9 @@ def sidebar(settings_payload: Dict) -> None:
                     p, meta = sync_latest_ci_snapshot(token, owner, repo)
                 st.sidebar.success(f"Synced: {p}")
                 if meta:
+                    write_latest_run_meta(meta)
+                    st.session_state["latest_run_meta"] = meta
+                if meta:
                     st.sidebar.caption(
                         f"Run #{meta.get('run_number')} • {meta.get('head_sha')} • {meta.get('updated_at')}"
                     )
@@ -358,12 +382,24 @@ def sidebar(settings_payload: Dict) -> None:
                 st.sidebar.error(f"Sync failed: {e}")
 
 
-def show_overview(latest_run: Dict) -> None:
+def show_overview(latest_run: Dict, meta: Dict | None = None) -> None:
     st.subheader("Latest run status")
     if not latest_run:
         st.info("No run data yet. Trigger the workflow once.")
         return
     st.write(f"Run ID: {latest_run.get('run_id')}")
+    if meta:
+        caption_bits = []
+        if meta.get("run_number"):
+            caption_bits.append(f"Run #{meta['run_number']}")
+        if meta.get("head_sha"):
+            caption_bits.append(meta["head_sha"])
+        if meta.get("updated_at"):
+            caption_bits.append(str(meta["updated_at"]))
+        if caption_bits:
+            st.caption(" • ".join(caption_bits))
+        if meta.get("note"):
+            st.warning(meta["note"])
     cols = st.columns(3)
     for idx, (location_id, summary) in enumerate(latest_run.get("locations", {}).items()):
         col = cols[idx % len(cols)]

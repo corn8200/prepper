@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Literal
+from typing import Dict, List
 
 from pydantic import BaseModel, Field, RootModel, field_validator, model_validator
 
@@ -77,6 +77,7 @@ class NewsStackSurge(BaseModel):
 class NewsStackConfig(BaseModel):
     rss_sources: List[str]
     google_news_queries_per_location: List[str]
+    require_hazard: bool = False
     hazard_keywords: List[str] = Field(default_factory=list)
     surge: NewsStackSurge
 

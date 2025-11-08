@@ -22,6 +22,12 @@ global:
       - times-news.com
       - your4state.com
       - pennlive.com
+      - journal-news.net
+      - nvdaily.com
+      - loudounnow.com
+      - loudountimes.com
+      - winchesterstar.com
+      - whsv.com
 thresholds:
   nws_severity_emergency:
     - Extreme
@@ -42,12 +48,22 @@ news_stack:
     - https://www.heraldmailmedia.com/search/?f=rss
     - https://www.wvnews.com/search/?f=rss
     - https://www.wvpublic.org/rss.xml
+    - https://www.journal-news.net/search/?f=rss
+    - https://www.nvdaily.com/search/?f=rss
+    - https://loudounnow.com/feed/
+    - https://www.loudountimes.com/search/?f=rss
+    - https://www.your4state.com/feed/
+    - https://www.whsv.com/video/?output=rss
+    - https://www.wvnstv.com/feed/
+    - https://wvmetronews.com/feed/
+    - https://www.winchesterstar.com/search/?f=rss
   google_news_queries_per_location:
     - "<CITY STATE>"
     - "<COUNTY STATE>"
     - "<CITY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "<COUNTY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "(I-70|I-81|US-340) (closed|shutdown|hazmat|multi-vehicle|jackknife)"
+  require_hazard: false
   hazard_keywords:
     - evacuate
     - shelter-in-place

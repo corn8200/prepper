@@ -11,7 +11,7 @@ import html
 import os
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Iterable
 
 import requests
 from bs4 import BeautifulSoup
@@ -89,4 +89,3 @@ def enrich_items_with_fulltext(items, *, allow_domains: Iterable[str], max_items
             item["content"] = body[: max_chars]
         out.append(item)
     return out
-

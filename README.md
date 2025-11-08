@@ -67,10 +67,12 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
 
 ## Getting Started
 1. Create a GitHub repository named `preppers-alerts` (MIT) and push this project.
-2. Configure secrets under **Settings → Actions → Secrets and variables → Actions**:
-   - `NWS_USER_AGENT`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`, `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
+2. Configure secrets under **Settings → Actions → Secrets and variables → Actions** (required for CI to run successfully):
+   - `OPENAI_API_KEY`
+   - `NWS_USER_AGENT`
+   - `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`
+   - `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
    - Optional: `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
-   - Required for LLM news: `OPENAI_API_KEY`
 3. Install Python 3.11 locally, create a virtual environment, and install dependencies:
    ```bash
    python -m venv .venv
@@ -88,8 +90,11 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    export LLM_MIN_SEVERITY=3         # only emit alerts for severity >= 3
    export LLM_CONFIRM_MIN_SEVERITY=2 # only count toward confirmation if severity >= 2
    export LLM_ALLOW_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,severe_weather,public_health,crime"
-   export NEWS_REQUIRE_HAZARD=1      # require hazard keywords to appear in RSS items
-   
+   export NEWS_REQUIRE_HAZARD=0      # send everything to the LLM; it will filter by locality + severity
+   export PUSHOVER_PRIORITY2_SOUND=siren     # optional critical sound override
+   export PUSHOVER_EMERGENCY_RETRY=30        # retry every 30s for emergency alerts
+   export PUSHOVER_EMERGENCY_EXPIRE=300      # give up after 5 minutes
+
    python -m scripts.cli rebuild-keywords
    python -m scripts.prepper_alerts --dry-run
    ```
@@ -97,6 +102,12 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    ```bash
    PYTHONPATH=. python -m scripts.cli dashboard --port 8501
    # Then open http://localhost:8501
+   ```
+
+6. Inspect intake when tuning queries:
+   ```bash
+   PYTHONPATH=. python -m scripts.cli debug-news --location home --limit 10
+   PYTHONPATH=. python -m scripts.cli debug-news --location work --limit 10
    ```
 
 See `SECURITY.md` for coordinated disclosure guidance.

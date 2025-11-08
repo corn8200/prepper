@@ -112,8 +112,10 @@ class AlertDispatcher:
         emergency_expire = outputs.get("emergency_expire_sec", 3600)  # type: ignore[arg-type]
         self.use_email = bool(outputs.get("use_email", True))
         self.use_pushover = bool(outputs.get("use_pushover", True))
-        self.emergency_retry = int(emergency_retry)
-        self.emergency_expire = int(emergency_expire)
+        env_retry = os.getenv("PUSHOVER_EMERGENCY_RETRY")
+        env_expire = os.getenv("PUSHOVER_EMERGENCY_EXPIRE")
+        self.emergency_retry = int(env_retry) if env_retry else int(emergency_retry)
+        self.emergency_expire = int(env_expire) if env_expire else int(emergency_expire)
         self.dry_run = dry_run
         self.pushover = PushoverClient(os.getenv("PUSHOVER_USER_KEY"), os.getenv("PUSHOVER_APP_TOKEN"))
         self.email = EmailClient(os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD"), os.getenv("ALERT_EMAIL_TO"))

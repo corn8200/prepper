@@ -41,7 +41,8 @@ def run(dry_run: bool) -> None:
 @click.option("--port", type=int, default=8501, help="Port for Streamlit app")
 def dashboard(port: int) -> None:
     """Launch the Streamlit dashboard locally."""
-    import subprocess, sys
+    import subprocess
+    import sys
     from pathlib import Path
     app = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
     cmd = [sys.executable, "-m", "streamlit", "run", str(app), "--server.port", str(port)]
@@ -94,13 +95,12 @@ def debug_news(location: str, limit: int) -> None:
     from .config_models import KeywordsConfig, LocationsConfig, SettingsConfig
     from .sources.news_rss import NewsRSSClient
     from pathlib import Path
-    import json
 
     root = Path(__file__).resolve().parents[1]
     locs = LocationsConfig.model_validate(load_yaml(root / "config" / "locations.yaml"))
     settings = SettingsConfig.model_validate(load_yaml(root / "config" / "settings.yaml"))
     keywords = KeywordsConfig.model_validate(load_yaml(root / "config" / "keywords.yaml"))
-    loc = next((l for l in locs.locations if l.id == location), None)
+    loc = next((loc_item for loc_item in locs.locations if loc_item.id == location), None)
     if not loc:
         raise SystemExit(f"Unknown location id: {location}")
     client = NewsRSSClient(
@@ -108,6 +108,7 @@ def debug_news(location: str, limit: int) -> None:
         settings.global_.safety.allowlist_domains,
         settings.news_stack.google_news_queries_per_location,
         getattr(settings.news_stack, "hazard_keywords", []),
+        getattr(settings.news_stack, "require_hazard", True),
     )
     loc_payload = loc.model_dump()
     loc_payload["label"] = loc.label
