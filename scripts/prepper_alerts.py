@@ -24,12 +24,9 @@ try:
     from .sources.airnow import AirNowClient
     from .sources.base import SourceResult
     from .sources.eonet import EONETClient
-    from .sources.gdelt import GDELTClient
     from .sources.news_rss import NewsRSSClient
-    from .sources.newsapi_layer import NewsAPIClient
     from .sources.nws import NWSClient
     from .sources.usgs import USGSClient
-    from .sources.wiki import WikiClient
     from .state import AlertKey, StateStore, utcnow
     from .validate import load_yaml
     try:
@@ -47,12 +44,9 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
     from scripts.sources.airnow import AirNowClient
     from scripts.sources.base import SourceResult
     from scripts.sources.eonet import EONETClient
-    from scripts.sources.gdelt import GDELTClient
     from scripts.sources.news_rss import NewsRSSClient
-    from scripts.sources.newsapi_layer import NewsAPIClient
     from scripts.sources.nws import NWSClient
     from scripts.sources.usgs import USGSClient
-    from scripts.sources.wiki import WikiClient
     from scripts.state import AlertKey, StateStore, utcnow
     from scripts.validate import load_yaml
     try:
@@ -144,9 +138,6 @@ class PrepperAlertsRunner:
         thresholds = self.settings_cfg.thresholds
         hysteria = self.settings_cfg.hysteria
         news_stack = self.settings_cfg.news_stack
-        self.newsapi_mode = news_stack.mode
-        self.newsapi_cooldown = news_stack.quotas.newsapi_cooldown_minutes
-        self.newsapi_burst_minutes = news_stack.quotas.newsapi_burst_minutes
         self.severe_thresholds = set(thresholds.nws_severity_emergency)
         self.signals = SignalsEngine(
             news_min_mentions=thresholds.news_min_mentions,
@@ -176,9 +167,6 @@ class PrepperAlertsRunner:
             "nws": NWSClient(),
             "usgs": USGSClient(),
             "news_rss": NewsRSSClient(news_stack.rss_sources, allow_domains, news_stack.google_news_queries_per_location),
-            "newsapi": NewsAPIClient(allow_domains=list(allow_domains)),
-            "gdelt": GDELTClient(),
-            "wiki": WikiClient(),
             "eonet": EONETClient(),
             "airnow": AirNowClient(),
         }
@@ -197,12 +185,7 @@ class PrepperAlertsRunner:
             official_severe = False
             rss_items: List[Dict[str, Any]] = []
             for name, source in self.sources.items():
-                if name == "newsapi" and not self._should_run_newsapi(official_severe, news_surge_active):
-                    result = SourceResult(provider="newsapi", location_id=location.id, items=[], ok=False, error="Skipped by scheduler", latency_ms=0)
-                else:
-                    result = source.fetch(location_payload, keywords)
-                    if name == "newsapi" and result.ok:
-                        self.state.set_metadata("newsapi_last_run", utcnow().isoformat())
+                result = source.fetch(location_payload, keywords)
                 self.summary.record_source(result)
                 self.metrics.record_fetch(self.summary.run_id, result)
                 if result.provider == "news_rss" and result.ok:
@@ -212,8 +195,6 @@ class PrepperAlertsRunner:
                     self.summary.record_surge(surge)
                     news_surge_active = news_surge_active or surge.tripped
                     rss_items = result.items or []
-                if result.provider in {"gdelt", "newsapi", "wiki"} and result.ok and result.items:
-                    self.signals.record_confirmation(location.id, result.provider)
                 if result.provider == "nws" and result.items:
                     pending_nws.extend(result.items)
                     if any((item.get("severity") or "") in self.severe_thresholds for item in result.items):
@@ -388,31 +369,7 @@ class PrepperAlertsRunner:
         tokens.update(term.lower() for term in keywords.get("geo_terms", []))
         return any(token and token in search_text for token in tokens)
 
-    def _should_run_newsapi(self, official_severe: bool, news_surge_active: bool) -> bool:
-        if self.newsapi_mode == "off":
-            return False
-        if self.newsapi_mode == "always":
-            return True
-        now = utcnow()
-        if official_severe or news_surge_active:
-            burst_until = now + timedelta(minutes=self.newsapi_burst_minutes)
-            self.state.set_metadata("newsapi_burst_until", burst_until.isoformat())
-            return True
-        burst_until_str = self.state.get_metadata("newsapi_burst_until")
-        if burst_until_str:
-            try:
-                if datetime.fromisoformat(burst_until_str) > now:
-                    return True
-            except ValueError:
-                LOGGER.debug("Invalid burst timestamp %s", burst_until_str)
-        last_run_str = self.state.get_metadata("newsapi_last_run")
-        if not last_run_str:
-            return True
-        try:
-            last_run = datetime.fromisoformat(last_run_str)
-        except ValueError:
-            return True
-        return (now - last_run) >= timedelta(minutes=self.newsapi_cooldown)
+    # NewsAPI no longer used; LLM classification over RSS is the primary news path.
 
 
 def run_once(dry_run: bool = False) -> None:

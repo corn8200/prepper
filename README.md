@@ -1,13 +1,13 @@
 # Preppers Alerts
 
-Multi-location situational awareness pipeline for Harper's Ferry (home), Frederick (work), and user-defined locations. The project polls official (NWS, USGS) and intelligence (RSS, NewsAPI, GDELT, Wikipedia, etc.) sources on a 10-minute cadence, deduplicates and fuses the signals, and emits ultra-low-noise alerts via email and Pushover. A Streamlit dashboard surfaces config CRUD, thresholds, dry-run toggles, and observability for runs, metrics, and decisions.
+Multi-location situational awareness pipeline for Harper's Ferry (home), Frederick (work), and user-defined locations. The project polls official sources (NWS, USGS, EONET, AirNow) and an LLM-first news path (RSS + Google News RSS with full‑text extraction and OpenAI classification) on a 10-minute cadence, deduplicates and fuses the signals, and emits ultra-low-noise alerts via email and Pushover. A Streamlit dashboard surfaces config CRUD, thresholds, dry-run toggles, and observability for runs, metrics, and decisions.
 
 ## Key Features
 - **Reliable automation:** GitHub Actions workflow runs every 10 minutes with concurrency control, installs Python 3.11 dependencies, rebuilds keywords, runs the orchestrator, and persists run state back into the repository when necessary using a bot identity.
 - **Configurable fusion logic:** `config/locations.yaml` is the source of truth for monitored geos; `config/settings.yaml` controls thresholds, surge detection, quotas, and toggles.
 - **Observability-first dashboard:** Streamlit UI now includes news stack + allowlist editors, per-location overrides, CRUD for locations/settings, insight into alerts, persistent metrics, and hallway testing (dry-run, send test push) without touching CI.
 - **Alerts with guardrails:** Email/Pushover delivery layers implement severity gates, cooldowns, multi-source confirmation, and dedupe to keep false positives low.
-- **LLM-first news triage (optional):** RSS + Google News feeds are fetched, full text is extracted, and an OpenAI model classifies prepper relevance with categories and severity. Accepted items can act as confirming evidence or emit alerts directly (env‑controlled).
+- **LLM-only news triage:** RSS + Google News feeds are fetched, full text is extracted, and an OpenAI model classifies prepper relevance with categories and severity. Accepted items act as confirming evidence and can emit alerts directly (env‑controlled). Third‑party news APIs are not used.
 
 ## Workspace-SSO Streamlit Deployment (Cloud Run + IAP)
 Turn the Streamlit dashboard into a Google Workspace–protected site:
@@ -69,8 +69,8 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
 1. Create a GitHub repository named `preppers-alerts` (MIT) and push this project.
 2. Configure secrets under **Settings → Actions → Secrets and variables → Actions**:
    - `NWS_USER_AGENT`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`, `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
-   - Optional: `NEWS_API_KEY`, `AIRNOW_API_KEY`, `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
-   - Optional (LLM classification): `OPENAI_API_KEY`
+   - Optional: `AIRNOW_API_KEY`, `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
+   - Required for LLM news: `OPENAI_API_KEY`
    - Optional (LLM classification): `OPENAI_API_KEY`
 3. Install Python 3.11 locally, create a virtual environment, and install dependencies:
    ```bash
