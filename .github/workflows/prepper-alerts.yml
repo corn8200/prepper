@@ -40,6 +40,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -n "$(git status --porcelain data config/keywords.yaml)" ]]; then
+            if [[ -z "${{ secrets.GH_PUSH_TOKEN }}" ]]; then
+              echo "GH_PUSH_TOKEN not set; skipping automatic commit/push."
+              exit 0
+            fi
             BOT_NAME="${{ secrets.GH_BOT_NAME }}"
             BOT_EMAIL="${{ secrets.GH_BOT_EMAIL }}"
             if [[ -z "$BOT_NAME" ]]; then BOT_NAME="github-actions"; fi
