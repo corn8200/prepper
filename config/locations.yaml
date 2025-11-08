@@ -1,0 +1,23 @@
+locations:
+  - id: home
+    label: "Harper's Ferry, WV"
+    role: home
+    lat: 39.323
+    lon: -77.739
+    radius_km: 250
+    roads:
+      - US-340
+      - I-81
+  - id: work
+    label: "Frederick, MD"
+    role: work
+    lat: 39.414
+    lon: -77.410
+    radius_km: 250
+    roads:
+      - I-70
+      - US-15
+defaults:
+  quake_min_mag_normal: 4.0
+  quake_min_mag_emergency: 5.5
+  aqi_emergency: 200

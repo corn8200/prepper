@@ -1,0 +1,352 @@
+"""Main orchestration loop invoked by CI and CLI."""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from pathlib import Path
+import sys
+from typing import Any, Dict, Iterable, List
+from uuid import uuid4
+
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+try:
+    from .alerting import AlertDispatcher, AlertPayload
+    from .config_models import KeywordsConfig, LocationsConfig, SettingsConfig
+    from .keywords_builder import normalize_ascii
+    from .metrics import MetricsStore
+    from .signals import SignalsEngine, SurgeResult
+    from .sources.airnow import AirNowClient
+    from .sources.base import SourceResult
+    from .sources.eonet import EONETClient
+    from .sources.gdelt import GDELTClient
+    from .sources.news_rss import NewsRSSClient
+    from .sources.newsapi_layer import NewsAPIClient
+    from .sources.nws import NWSClient
+    from .sources.usgs import USGSClient
+    from .sources.wiki import WikiClient
+    from .state import AlertKey, StateStore, utcnow
+    from .validate import load_yaml
+except ImportError:  # pragma: no cover - fallback for direct script execution
+    from scripts.alerting import AlertDispatcher, AlertPayload
+    from scripts.config_models import KeywordsConfig, LocationsConfig, SettingsConfig
+    from scripts.keywords_builder import normalize_ascii
+    from scripts.metrics import MetricsStore
+    from scripts.signals import SignalsEngine, SurgeResult
+    from scripts.sources.airnow import AirNowClient
+    from scripts.sources.base import SourceResult
+    from scripts.sources.eonet import EONETClient
+    from scripts.sources.gdelt import GDELTClient
+    from scripts.sources.news_rss import NewsRSSClient
+    from scripts.sources.newsapi_layer import NewsAPIClient
+    from scripts.sources.nws import NWSClient
+    from scripts.sources.usgs import USGSClient
+    from scripts.sources.wiki import WikiClient
+    from scripts.state import AlertKey, StateStore, utcnow
+    from scripts.validate import load_yaml
+
+LOGGER = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parents[1]
+DATA_DIR = ROOT / "data"
+LATEST_RUN_PATH = DATA_DIR / "latest_run.json"
+STATE_PATH = DATA_DIR / "alerts_state.json"
+
+
+@dataclass
+class AlertDecision:
+    provider: str
+    location_id: str
+    title: str
+    body: str
+    priority: int
+    url: str | None = None
+    category: str = "general"
+    reason: str = ""
+
+
+@dataclass
+class LocationSummary:
+    sources: Dict[str, Dict[str, int | bool | str]] = field(default_factory=dict)
+    alerts: List[Dict[str, str | int]] = field(default_factory=list)
+    surges: List[Dict[str, int | float | bool]] = field(default_factory=list)
+
+
+class RunSummary:
+    def __init__(self) -> None:
+        self.locations: Dict[str, LocationSummary] = {}
+        self.run_id = str(uuid4())
+
+    def record_source(self, result: SourceResult) -> None:
+        entry = self.locations.setdefault(result.location_id, LocationSummary())
+        entry.sources[result.provider] = {
+            "ok": result.ok,
+            "count": len(result.items),
+            "error": result.error or "",
+            "latency_ms": result.latency_ms or 0,
+        }
+
+    def record_alert(self, decision: AlertDecision, channels: Dict[str, bool]) -> None:
+        entry = self.locations.setdefault(decision.location_id, LocationSummary())
+        entry.alerts.append(
+            {
+                "provider": decision.provider,
+                "title": decision.title,
+                "priority": decision.priority,
+                "reason": decision.reason,
+                "channels": channels,
+            }
+        )
+
+    def record_surge(self, surge: SurgeResult) -> None:
+        entry = self.locations.setdefault(surge.location_id, LocationSummary())
+        entry.surges.append(
+            {
+                "count": surge.count,
+                "baseline": surge.baseline,
+                "factor": surge.factor,
+                "domains": surge.distinct_domains,
+                "tripped": surge.tripped,
+            }
+        )
+
+    def write(self) -> None:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {"run_id": self.run_id, "locations": {loc: summary.__dict__ for loc, summary in self.locations.items()}}
+        LATEST_RUN_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+class PrepperAlertsRunner:
+    def __init__(self, dry_run: bool = False) -> None:
+        self.locations_cfg = LocationsConfig.model_validate(load_yaml(ROOT / "config" / "locations.yaml"))
+        self.settings_cfg = SettingsConfig.model_validate(load_yaml(ROOT / "config" / "settings.yaml"))
+        self.keywords_cfg = KeywordsConfig.model_validate(load_yaml(ROOT / "config" / "keywords.yaml"))
+        testing_override = self.settings_cfg.testing.dry_run
+        self.dry_run = dry_run or testing_override
+        self.state = StateStore.load(STATE_PATH)
+        self.run_started_at = utcnow()
+        thresholds = self.settings_cfg.thresholds
+        hysteria = self.settings_cfg.hysteria
+        news_stack = self.settings_cfg.news_stack
+        self.newsapi_mode = news_stack.mode
+        self.newsapi_cooldown = news_stack.quotas.newsapi_cooldown_minutes
+        self.newsapi_burst_minutes = news_stack.quotas.newsapi_burst_minutes
+        self.severe_thresholds = set(thresholds.nws_severity_emergency)
+        self.signals = SignalsEngine(
+            news_min_mentions=thresholds.news_min_mentions,
+            news_spike_factor=thresholds.news_spike_factor,
+            require_domains=news_stack.surge.require_distinct_domains,
+            hysteria_sources=hysteria.require_sources,
+        )
+        self.dispatcher = AlertDispatcher(config={"outputs": self.settings_cfg.global_.outputs.model_dump()}, dry_run=self.dry_run)
+        self.summary = RunSummary()
+        self.sources = self._build_sources(news_stack=news_stack, allow_domains=self.settings_cfg.global_.safety.allowlist_domains)
+        self.metrics = MetricsStore(DATA_DIR / "metrics.db")
+        self.metrics.record_run_start(self.summary.run_id, self.run_started_at, self.dry_run)
+
+    def _build_sources(self, news_stack, allow_domains: Iterable[str]):
+        return {
+            "nws": NWSClient(),
+            "usgs": USGSClient(),
+            "news_rss": NewsRSSClient(news_stack.rss_sources, allow_domains, news_stack.google_news_queries_per_location),
+            "newsapi": NewsAPIClient(allow_domains=list(allow_domains)),
+            "gdelt": GDELTClient(),
+            "wiki": WikiClient(),
+            "eonet": EONETClient(),
+            "airnow": AirNowClient(),
+        }
+
+    def run(self) -> None:
+        LOGGER.info("Starting run (dry_run=%s)", self.dry_run)
+        for location in self.locations_cfg.locations:
+            LOGGER.info("Processing %s", location.id)
+            location_payload = location.model_dump()
+            location_payload["label"] = location.label
+            keywords_entry = self.keywords_cfg.locations.get(location.id)
+            keywords = keywords_entry.model_dump() if keywords_entry else {}
+            pending_nws: List[Dict[str, Any]] = []
+            pending_usgs: List[Dict[str, Any]] = []
+            news_surge_active = False
+            official_severe = False
+            for name, source in self.sources.items():
+                if name == "newsapi" and not self._should_run_newsapi(official_severe, news_surge_active):
+                    result = SourceResult(provider="newsapi", location_id=location.id, items=[], ok=False, error="Skipped by scheduler", latency_ms=0)
+                else:
+                    result = source.fetch(location_payload, keywords)
+                    if name == "newsapi" and result.ok:
+                        self.state.set_metadata("newsapi_last_run", utcnow().isoformat())
+                self.summary.record_source(result)
+                self.metrics.record_fetch(self.summary.run_id, result)
+                if result.provider == "news_rss" and result.ok:
+                    domains = {item.get("domain") for item in result.items if item.get("domain")}
+                    surge = self.signals.record_news(location.id, len(result.items), len(domains))
+                    self.metrics.record_surge(self.summary.run_id, surge)
+                    self.summary.record_surge(surge)
+                    news_surge_active = news_surge_active or surge.tripped
+                if result.provider in {"gdelt", "newsapi", "wiki"} and result.ok and result.items:
+                    self.signals.record_confirmation(location.id, result.provider)
+                if result.provider == "nws" and result.items:
+                    pending_nws.extend(result.items)
+                    if any((item.get("severity") or "") in self.severe_thresholds for item in result.items):
+                        official_severe = True
+                if result.provider == "usgs" and result.items:
+                    pending_usgs.extend(result.items)
+            hysteria_active = self.signals.hysteria_active(location.id)
+            if hysteria_active:
+                LOGGER.info("HYSTERIA active for %s", location.id)
+            for item in pending_nws:
+                decision = self._decision_from_nws(location_payload, keywords, item, hysteria_active)
+                if decision:
+                    self._emit_if_needed(decision)
+            for item in pending_usgs:
+                decision = self._decision_from_usgs(location.id, item)
+                if decision:
+                    self._emit_if_needed(decision)
+        self.state.save()
+        self.summary.write()
+        ended_at = utcnow()
+        self.metrics.record_run_end(self.summary.run_id, ended_at, (ended_at - self.run_started_at).total_seconds())
+        self.metrics.close()
+        self.signals.reset_run_state()
+
+    def _decision_from_nws(
+        self,
+        location_payload: Dict[str, Any],
+        keywords: Dict[str, Any],
+        item: Dict[str, Any],
+        hysteria_active: bool,
+    ) -> AlertDecision | None:
+        if not self._nws_impacts_location(location_payload, keywords, item):
+            return None
+        severity = (item.get("severity") or "").title()
+        event = item.get("event") or "NWS Alert"
+        is_watch = "watch" in event.lower() or severity.lower() in {"minor", "moderate"}
+        if is_watch and not hysteria_active:
+            return None
+        if severity not in self.severe_thresholds and not hysteria_active:
+            return None
+        urgency = (item.get("urgency") or "").lower()
+        priority = 2 if severity in self.severe_thresholds or urgency == "immediate" else 1
+        reason_bits = [f"severity={severity}"]
+        if hysteria_active:
+            reason_bits.append("hysteria")
+        title = f"[{location_payload['id'].upper()}] {event}"
+        body = normalize_ascii(item.get("description") or item.get("headline") or "")
+        return AlertDecision(
+            provider="nws",
+            location_id=location_payload["id"],
+            title=title,
+            body=body[:5000],
+            priority=priority,
+            url=item.get("uri"),
+            category="nws",
+            reason=";".join(reason_bits),
+        )
+
+    def _decision_from_usgs(self, location_id: str, item: Dict[str, str | float | None]) -> AlertDecision | None:
+        mag = item.get("mag") or 0
+        overrides = self.settings_cfg.per_location_overrides.root.get(location_id, {})
+        normal = overrides.get("quake_min_mag_normal", self.locations_cfg.defaults.quake_min_mag_normal)
+        emergency = overrides.get("quake_min_mag_emergency", self.locations_cfg.defaults.quake_min_mag_emergency)
+        if mag < normal:
+            return None
+        priority = 2 if mag >= emergency else 1
+        title = f"[{location_id.upper()}] M{mag} earthquake"
+        body = normalize_ascii(item.get("place") or "USGS event")
+        return AlertDecision(
+            provider="usgs",
+            location_id=location_id,
+            title=title,
+            body=body,
+            priority=priority,
+            url=item.get("url"),
+            category="earthquake",
+            reason=f"mag={mag}",
+        )
+
+    def _emit_if_needed(self, decision: AlertDecision) -> None:
+        key = AlertKey(location_id=decision.location_id, provider=decision.provider, external_id=decision.title, category=decision.category)
+        cooldown_bucket = f"{decision.location_id}:{decision.category}:{decision.priority}"
+        if self.state.is_seen(key):
+            LOGGER.info("Skipping duplicate alert %s", decision.title)
+            return
+        if self.state.in_cooldown(cooldown_bucket):
+            LOGGER.info("Cooldown active for %s", cooldown_bucket)
+            return
+        payload = AlertPayload(
+            title=decision.title,
+            body=f"{decision.body}\nReason: {decision.reason}",
+            priority=decision.priority,
+            url=decision.url,
+            location_id=decision.location_id,
+        )
+        channels = self.dispatcher.dispatch(payload)
+        self.summary.record_alert(decision, channels)
+        self.state.mark_seen(key)
+        self.state.start_cooldown(cooldown_bucket, self.settings_cfg.hysteria.cooldown_minutes)
+        alert_id = key.composite()
+        self.metrics.record_alert(
+            self.summary.run_id,
+            alert_id,
+            decision.location_id,
+            decision.__dict__,
+            channels,
+            utcnow(),
+        )
+
+    def _nws_impacts_location(self, location_payload: Dict[str, Any], keywords: Dict[str, Any], item: Dict[str, Any]) -> bool:
+        area_desc = normalize_ascii(item.get("area_desc") or "").lower()
+        headline = normalize_ascii(item.get("headline") or "").lower()
+        search_text = f"{area_desc} {headline}"
+        if not search_text.strip():
+            return True
+        tokens = {
+            normalize_ascii(location_payload.get("label", "")).lower(),
+            location_payload["id"].lower(),
+        }
+        tokens.update(term.lower() for term in keywords.get("geo_terms", []))
+        return any(token and token in search_text for token in tokens)
+
+    def _should_run_newsapi(self, official_severe: bool, news_surge_active: bool) -> bool:
+        if self.newsapi_mode == "off":
+            return False
+        if self.newsapi_mode == "always":
+            return True
+        now = utcnow()
+        if official_severe or news_surge_active:
+            burst_until = now + timedelta(minutes=self.newsapi_burst_minutes)
+            self.state.set_metadata("newsapi_burst_until", burst_until.isoformat())
+            return True
+        burst_until_str = self.state.get_metadata("newsapi_burst_until")
+        if burst_until_str:
+            try:
+                if datetime.fromisoformat(burst_until_str) > now:
+                    return True
+            except ValueError:
+                LOGGER.debug("Invalid burst timestamp %s", burst_until_str)
+        last_run_str = self.state.get_metadata("newsapi_last_run")
+        if not last_run_str:
+            return True
+        try:
+            last_run = datetime.fromisoformat(last_run_str)
+        except ValueError:
+            return True
+        return (now - last_run) >= timedelta(minutes=self.newsapi_cooldown)
+
+
+def run_once(dry_run: bool = False) -> None:
+    logging.basicConfig(level=logging.INFO)
+    runner = PrepperAlertsRunner(dry_run=dry_run)
+    runner.run()
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Run the Prepper Alerts orchestrator once.")
+    parser.add_argument("--dry-run", action="store_true", help="Prevent outbound notifications.")
+    args = parser.parse_args()
+    run_once(dry_run=args.dry_run)

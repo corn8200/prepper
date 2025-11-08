@@ -1,0 +1,60 @@
+name: Prepper Alerts
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: prepper-alerts
+  cancel-in-progress: true
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      NWS_USER_AGENT: ${{ secrets.NWS_USER_AGENT }}
+      GMAIL_USER: ${{ secrets.GMAIL_USER }}
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+      PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+      PUSHOVER_APP_TOKEN: ${{ secrets.PUSHOVER_APP_TOKEN }}
+      NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+      AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install --upgrade pip && pip install -r requirements.txt
+      - name: Validate configs
+        run: python -m scripts.validate
+      - name: Rebuild keywords
+        run: python -m scripts.cli rebuild-keywords
+      - name: Run orchestrator
+        run: python -m scripts.prepper_alerts
+      - name: Persist run artifacts
+        run: |
+          set -euo pipefail
+          if [[ -n "$(git status --porcelain data config/keywords.yaml)" ]]; then
+            BOT_NAME="${{ secrets.GH_BOT_NAME }}"
+            BOT_EMAIL="${{ secrets.GH_BOT_EMAIL }}"
+            if [[ -z "$BOT_NAME" ]]; then BOT_NAME="github-actions"; fi
+            if [[ -z "$BOT_EMAIL" ]]; then BOT_EMAIL="actions@github.com"; fi
+            git config user.name "$BOT_NAME"
+            git config user.email "$BOT_EMAIL"
+            git add data config/keywords.yaml
+            git commit -m "chore: persist alert artifacts"
+            git remote set-url origin https://x-access-token:${{ secrets.GH_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
+            git push origin HEAD:${{ github.ref_name }}
+          fi
+      - name: Upload latest snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-run
+          path: data/latest_run.json
+          if-no-files-found: ignore

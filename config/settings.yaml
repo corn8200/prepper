@@ -1,0 +1,55 @@
+global:
+  schedule_minutes: 10
+  outputs:
+    use_email: true
+    use_pushover: true
+    emergency_retry_sec: 60
+    emergency_expire_sec: 3600
+  safety:
+    allowlist_domains:
+      - apnews.com
+      - reuters.com
+      - wtop.com
+      - nbcwashington.com
+      - wusa9.com
+      - heraldmailmedia.com
+      - fredericknewspost.com
+      - localdvm.com
+thresholds:
+  nws_severity_emergency:
+    - Extreme
+    - Severe
+  news_spike_factor: 3.0
+  news_min_mentions: 3
+  wiki_spike_factor: 4.0
+hysteria:
+  require_sources: 2
+  window_minutes: 120
+  cooldown_minutes: 90
+news_stack:
+  rss_sources:
+    - https://wtop.com/feed/
+    - https://www.nbcwashington.com/feed/
+    - https://www.wusa9.com/feeds/syndication/rss/news/local/
+    - https://www.localdvm.com/feed/
+    - https://www.fredericknewspost.com/search/?f=rss
+    - https://www.heraldmailmedia.com/search/?f=rss
+  google_news_queries_per_location:
+    - "<CITY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
+    - "<COUNTY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
+    - "(I-70|I-81|US-340) (closed|shutdown|hazmat|multi-vehicle|jackknife)"
+  quotas:
+    newsapi_cooldown_minutes: 30
+    newsapi_burst_minutes: 60
+  surge:
+    require_distinct_domains: 2
+  mode: auto
+per_location_overrides:
+  home:
+    quake_min_mag_normal: 4.0
+    quake_min_mag_emergency: 5.5
+  work:
+    quake_min_mag_normal: 4.0
+    quake_min_mag_emergency: 5.5
+testing:
+  dry_run: false
