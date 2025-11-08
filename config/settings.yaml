@@ -14,7 +14,14 @@ global:
       - wusa9.com
       - heraldmailmedia.com
       - fredericknewspost.com
-      - localdvm.com
+      - dcnewsnow.com
+      - wvnews.com
+      - wvpublic.org
+      - wvnstv.com
+      - wvmetronews.com
+      - times-news.com
+      - your4state.com
+      - pennlive.com
 thresholds:
   nws_severity_emergency:
     - Extreme
@@ -30,10 +37,14 @@ news_stack:
     - https://wtop.com/feed/
     - https://www.nbcwashington.com/feed/
     - https://www.wusa9.com/feeds/syndication/rss/news/local/
-    - https://www.localdvm.com/feed/
+    - https://www.dcnewsnow.com/feed/
     - https://www.fredericknewspost.com/search/?f=rss
     - https://www.heraldmailmedia.com/search/?f=rss
+    - https://www.wvnews.com/search/?f=rss
+    - https://www.wvpublic.org/rss.xml
   google_news_queries_per_location:
+    - "<CITY STATE>"
+    - "<COUNTY STATE>"
     - "<CITY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "<COUNTY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "(I-70|I-81|US-340) (closed|shutdown|hazmat|multi-vehicle|jackknife)"

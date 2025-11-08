@@ -80,5 +80,45 @@ def send_test(priority: int, title: str, body: str, url: str, sound: str | None,
     result = dispatcher.dispatch(payload)
     click.echo(f"Sent test alert: {result}")
 
+
+@cli.command("debug-news")
+@click.option("--location", required=True, help="Location id to test (e.g., home, work)")
+@click.option("--limit", type=int, default=10, help="Max items to print")
+def debug_news(location: str, limit: int) -> None:
+    """Fetch news_rss for a specific location and print sample items.
+
+    Useful for verifying that RSS + Google News queries are returning results
+    before LLM filtering.
+    """
+    from .validate import load_yaml
+    from .config_models import KeywordsConfig, LocationsConfig, SettingsConfig
+    from .sources.news_rss import NewsRSSClient
+    from pathlib import Path
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    locs = LocationsConfig.model_validate(load_yaml(root / "config" / "locations.yaml"))
+    settings = SettingsConfig.model_validate(load_yaml(root / "config" / "settings.yaml"))
+    keywords = KeywordsConfig.model_validate(load_yaml(root / "config" / "keywords.yaml"))
+    loc = next((l for l in locs.locations if l.id == location), None)
+    if not loc:
+        raise SystemExit(f"Unknown location id: {location}")
+    client = NewsRSSClient(
+        settings.news_stack.rss_sources,
+        settings.global_.safety.allowlist_domains,
+        settings.news_stack.google_news_queries_per_location,
+        getattr(settings.news_stack, "hazard_keywords", []),
+    )
+    loc_payload = loc.model_dump()
+    loc_payload["label"] = loc.label
+    kw_entry = keywords.locations.get(location)
+    kw = kw_entry.model_dump() if kw_entry else {}
+    result = client.fetch(loc_payload, kw)
+    print(f"news_rss ok={result.ok} count={len(result.items)} latency_ms={result.latency_ms}")
+    for item in result.items[:limit]:
+        print("-", item.get("domain"), "|", (item.get("title") or "")[:120])
+    if not result.items:
+        print("No items found. Consider disabling NEWS_REQUIRE_HAZARD=1 during testing or expanding queries.")
+
 if __name__ == "__main__":
     cli()

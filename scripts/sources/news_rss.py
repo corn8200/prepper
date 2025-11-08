@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 from typing import Any, Dict, Iterable, List, Optional, Set
+from urllib.parse import urlparse, parse_qs, unquote
 
 import feedparser
 import requests
@@ -75,7 +76,18 @@ class NewsRSSClient(BaseSource):
             dedupe_key = link or entry.get("title", "")
             if dedupe_key in seen:
                 continue
-            domain = tldextract.extract(link).registered_domain
+            raw_domain = tldextract.extract(link).registered_domain
+            domain = raw_domain
+            # For Google News RSS entries, extract the real publisher URL from the 'url' query param
+            if raw_domain in {"google.com", "news.google.com"} and "url=" in link:
+                try:
+                    q = parse_qs(urlparse(link).query)
+                    candidate = q.get("url", [None])[0]
+                    if candidate:
+                        link = unquote(candidate)
+                        domain = tldextract.extract(link).registered_domain
+                except Exception:
+                    domain = raw_domain
             if self.allow_domains and domain not in self.allow_domains:
                 continue
             title = entry.get("title", "") or ""

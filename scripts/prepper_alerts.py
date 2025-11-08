@@ -286,6 +286,13 @@ class PrepperAlertsRunner:
                 decision = self._decision_from_usgs(location.id, item)
                 if decision:
                     self._emit_if_needed(decision)
+        # Persist state and summary for this run
+        self.state.save()
+        self.summary.write()
+        ended_at = utcnow()
+        self.metrics.record_run_end(self.summary.run_id, ended_at, (ended_at - self.run_started_at).total_seconds())
+        self.metrics.close()
+        self.signals.reset_run_state()
 
     def _geo_specific_match(self, item: Dict[str, Any], keywords: Dict[str, Any]) -> bool:
         """Return True if the item text contains a specific local token (city/county/road), not just state/state code.
@@ -311,12 +318,6 @@ class PrepperAlertsRunner:
         if state_code and state_code.lower() in text:
             return False
         return False
-        self.state.save()
-        self.summary.write()
-        ended_at = utcnow()
-        self.metrics.record_run_end(self.summary.run_id, ended_at, (ended_at - self.run_started_at).total_seconds())
-        self.metrics.close()
-        self.signals.reset_run_state()
 
     def _decision_from_nws(
         self,

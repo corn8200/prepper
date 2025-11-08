@@ -26,6 +26,7 @@ jobs:
       LLM_EMIT_ALERTS: '1'
       LLM_MIN_SEVERITY: '3'
       LLM_CONFIRM_MIN_SEVERITY: '2'
+      NEWS_REQUIRE_HAZARD: '0'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +42,13 @@ jobs:
         run: python -m scripts.cli rebuild-keywords
       - name: Run orchestrator
         run: python -m scripts.prepper_alerts
+      - name: Ensure snapshot file exists
+        if: always()
+        run: |
+          mkdir -p data
+          if [ ! -f data/latest_run.json ]; then
+            echo '{"run_id":"none","locations":{}}' > data/latest_run.json
+          fi
       - name: Persist run artifacts
         run: |
           set -euo pipefail
