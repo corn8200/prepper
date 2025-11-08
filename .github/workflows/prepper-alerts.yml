@@ -20,7 +20,6 @@ jobs:
       PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
       PUSHOVER_APP_TOKEN: ${{ secrets.PUSHOVER_APP_TOKEN }}
       NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
-      AIRNOW_API_KEY: ${{ secrets.AIRNOW_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       LLM_CLASSIFY_NEWS: '1'
       LLM_MAX_ITEMS: '6'

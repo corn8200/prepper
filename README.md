@@ -1,6 +1,6 @@
 # Preppers Alerts
 
-Multi-location situational awareness pipeline for Harper's Ferry (home), Frederick (work), and user-defined locations. The project polls official sources (NWS, USGS, EONET, AirNow) and an LLM-first news path (RSS + Google News RSS with full‑text extraction and OpenAI classification) on a 10-minute cadence, deduplicates and fuses the signals, and emits ultra-low-noise alerts via email and Pushover. A Streamlit dashboard surfaces config CRUD, thresholds, dry-run toggles, and observability for runs, metrics, and decisions.
+Multi-location situational awareness pipeline for Harper's Ferry (home), Frederick (work), and user-defined locations. The project polls official sources (NWS, USGS, EONET) and an LLM-first news path (RSS + Google News RSS with full‑text extraction and OpenAI classification) on a 10-minute cadence, deduplicates and fuses the signals, and emits ultra-low-noise alerts via email and Pushover. A Streamlit dashboard surfaces config CRUD, thresholds, dry-run toggles, and observability for runs, metrics, and decisions.
 
 ## Key Features
 - **Reliable automation:** GitHub Actions workflow runs every 10 minutes with concurrency control, installs Python 3.11 dependencies, rebuilds keywords, runs the orchestrator, and persists run state back into the repository when necessary using a bot identity.
@@ -69,7 +69,7 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
 1. Create a GitHub repository named `preppers-alerts` (MIT) and push this project.
 2. Configure secrets under **Settings → Actions → Secrets and variables → Actions**:
    - `NWS_USER_AGENT`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`, `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
-   - Optional: `AIRNOW_API_KEY`, `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
+   - Optional: `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
    - Required for LLM news: `OPENAI_API_KEY`
    - Optional (LLM classification): `OPENAI_API_KEY`
 3. Install Python 3.11 locally, create a virtual environment, and install dependencies:

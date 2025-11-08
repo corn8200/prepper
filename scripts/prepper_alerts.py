@@ -21,7 +21,6 @@ try:
     from .keywords_builder import normalize_ascii
     from .metrics import MetricsStore
     from .signals import SignalsEngine, SurgeResult
-    from .sources.airnow import AirNowClient
     from .sources.base import SourceResult
     from .sources.eonet import EONETClient
     from .sources.news_rss import NewsRSSClient
@@ -41,7 +40,6 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
     from scripts.keywords_builder import normalize_ascii
     from scripts.metrics import MetricsStore
     from scripts.signals import SignalsEngine, SurgeResult
-    from scripts.sources.airnow import AirNowClient
     from scripts.sources.base import SourceResult
     from scripts.sources.eonet import EONETClient
     from scripts.sources.news_rss import NewsRSSClient
@@ -168,7 +166,6 @@ class PrepperAlertsRunner:
             "usgs": USGSClient(),
             "news_rss": NewsRSSClient(news_stack.rss_sources, allow_domains, news_stack.google_news_queries_per_location),
             "eonet": EONETClient(),
-            "airnow": AirNowClient(),
         }
 
     def run(self) -> None:
