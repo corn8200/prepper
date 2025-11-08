@@ -27,7 +27,6 @@ jobs:
       LLM_MIN_SEVERITY: '3'
       LLM_CONFIRM_MIN_SEVERITY: '2'
       NEWS_REQUIRE_HAZARD: ${{ vars.NEWS_REQUIRE_HAZARD || '0' }}
-      NEWS_REQUIRE_HAZARD: '0'
     steps:
       - name: Validate required secrets
         run: |
