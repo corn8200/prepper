@@ -17,7 +17,7 @@ def test_state_cooldown(tmp_path: Path):
 def test_state_metadata_roundtrip(tmp_path: Path):
     path = tmp_path / "state_meta.json"
     store = StateStore.load(path)
-    store.set_metadata("newsapi_last_run", "2024-01-01T00:00:00+00:00")
+    store.set_metadata("llm_last_run", "2024-01-01T00:00:00+00:00")
     store.save()
     reloaded = StateStore.load(path)
-    assert reloaded.get_metadata("newsapi_last_run") == "2024-01-01T00:00:00+00:00"
+    assert reloaded.get_metadata("llm_last_run") == "2024-01-01T00:00:00+00:00"
