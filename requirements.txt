@@ -19,3 +19,7 @@ structlog
 httpx
 pytest
 ruff
+beautifulsoup4
+readability-lxml
+lxml
+openai

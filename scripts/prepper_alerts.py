@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -31,6 +32,12 @@ try:
     from .sources.wiki import WikiClient
     from .state import AlertKey, StateStore, utcnow
     from .validate import load_yaml
+    try:
+        from .llm import classify_news_items  # optional
+        from .fetch import enrich_items_with_fulltext  # optional
+    except Exception:  # pragma: no cover
+        classify_news_items = None  # type: ignore
+        enrich_items_with_fulltext = None  # type: ignore
 except ImportError:  # pragma: no cover - fallback for direct script execution
     from scripts.alerting import AlertDispatcher, AlertPayload
     from scripts.config_models import KeywordsConfig, LocationsConfig, SettingsConfig
@@ -48,6 +55,12 @@ except ImportError:  # pragma: no cover - fallback for direct script execution
     from scripts.sources.wiki import WikiClient
     from scripts.state import AlertKey, StateStore, utcnow
     from scripts.validate import load_yaml
+    try:
+        from scripts.llm import classify_news_items  # type: ignore
+        from scripts.fetch import enrich_items_with_fulltext  # type: ignore
+    except Exception:  # pragma: no cover
+        classify_news_items = None  # type: ignore
+        enrich_items_with_fulltext = None  # type: ignore
 
 LOGGER = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[1]
@@ -146,6 +159,17 @@ class PrepperAlertsRunner:
         self.sources = self._build_sources(news_stack=news_stack, allow_domains=self.settings_cfg.global_.safety.allowlist_domains)
         self.metrics = MetricsStore(DATA_DIR / "metrics.db")
         self.metrics.record_run_start(self.summary.run_id, self.run_started_at, self.dry_run)
+        # Optional LLM classification
+        self.llm_enabled = bool(os.getenv("OPENAI_API_KEY")) and (os.getenv("LLM_CLASSIFY_NEWS", "").strip().lower() in {"1", "true", "yes", "on"})
+        try:
+            self.llm_max_items = int(os.getenv("LLM_MAX_ITEMS", "10"))
+        except ValueError:
+            self.llm_max_items = 10
+        try:
+            self.llm_max_chars = int(os.getenv("LLM_MAX_CHARS", "1000"))
+        except ValueError:
+            self.llm_max_chars = 1000
+        self.llm_emit_alerts = os.getenv("LLM_EMIT_ALERTS", "").strip().lower() in {"1", "true", "yes", "on"}
 
     def _build_sources(self, news_stack, allow_domains: Iterable[str]):
         return {
@@ -171,6 +195,7 @@ class PrepperAlertsRunner:
             pending_usgs: List[Dict[str, Any]] = []
             news_surge_active = False
             official_severe = False
+            rss_items: List[Dict[str, Any]] = []
             for name, source in self.sources.items():
                 if name == "newsapi" and not self._should_run_newsapi(official_severe, news_surge_active):
                     result = SourceResult(provider="newsapi", location_id=location.id, items=[], ok=False, error="Skipped by scheduler", latency_ms=0)
@@ -186,6 +211,7 @@ class PrepperAlertsRunner:
                     self.metrics.record_surge(self.summary.run_id, surge)
                     self.summary.record_surge(surge)
                     news_surge_active = news_surge_active or surge.tripped
+                    rss_items = result.items or []
                 if result.provider in {"gdelt", "newsapi", "wiki"} and result.ok and result.items:
                     self.signals.record_confirmation(location.id, result.provider)
                 if result.provider == "nws" and result.items:
@@ -194,6 +220,58 @@ class PrepperAlertsRunner:
                         official_severe = True
                 if result.provider == "usgs" and result.items:
                     pending_usgs.extend(result.items)
+            # Fetch full text and classify RSS items via LLM; treat accepted items as confirmation and optionally emit alerts
+            if self.llm_enabled and classify_news_items and rss_items:
+                enriched = rss_items
+                if enrich_items_with_fulltext:
+                    try:
+                        enriched = enrich_items_with_fulltext(
+                            rss_items,
+                            allow_domains=self.settings_cfg.global_.safety.allowlist_domains,
+                            max_items=self.llm_max_items,
+                            max_chars=self.llm_max_chars,
+                        )
+                    except Exception:
+                        enriched = rss_items[: self.llm_max_items]
+                try:
+                    filtered, meta = classify_news_items(
+                        enriched,
+                        location_id=location.id,
+                        geo_terms=(keywords or {}).get("geo_terms", []),
+                        max_items=self.llm_max_items,
+                    )
+                except Exception as err:  # pragma: no cover
+                    filtered, meta = [], {"used": True, "error": str(err)}
+                llm_result = SourceResult(
+                    provider="llm_news",
+                    location_id=location.id,
+                    items=filtered,
+                    ok=True,
+                    error=None if filtered else "no_relevant_items",
+                    latency_ms=None,
+                )
+                self.summary.record_source(llm_result)
+                self.metrics.record_fetch(self.summary.run_id, llm_result)
+                if filtered:
+                    self.signals.record_confirmation(location.id, "llm_news")
+                    if self.llm_emit_alerts:
+                        for i in filtered:
+                            sev = int(i.get("severity") or 1)
+                            priority = 2 if sev >= 3 else 1
+                            title = f"[{location.id.upper()}] {i.get('title','News item')}"
+                            body = normalize_ascii(i.get("content") or i.get("summary") or i.get("title") or "")
+                            reason = f"llm:{i.get('category','news')} sev={sev}; {i.get('reason','')}"
+                            decision = AlertDecision(
+                                provider="llm_news",
+                                location_id=location.id,
+                                title=title,
+                                body=body[:5000],
+                                priority=priority,
+                                url=i.get("link"),
+                                category="news",
+                                reason=reason,
+                            )
+                            self._emit_if_needed(decision)
             hysteria_active = self.signals.hysteria_active(location.id)
             if hysteria_active:
                 LOGGER.info("HYSTERIA active for %s", location.id)

@@ -84,6 +84,7 @@ class NewsRSSClient(BaseSource):
             results.append(
                 {
                     "title": title,
+                    "summary": summary,
                     "link": link,
                     "published": entry.get("published"),
                     "domain": domain,

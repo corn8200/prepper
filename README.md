@@ -7,7 +7,7 @@ Multi-location situational awareness pipeline for Harper's Ferry (home), Frederi
 - **Configurable fusion logic:** `config/locations.yaml` is the source of truth for monitored geos; `config/settings.yaml` controls thresholds, surge detection, quotas, and toggles.
 - **Observability-first dashboard:** Streamlit UI now includes news stack + allowlist editors, per-location overrides, CRUD for locations/settings, insight into alerts, persistent metrics, and hallway testing (dry-run, send test push) without touching CI.
 - **Alerts with guardrails:** Email/Pushover delivery layers implement severity gates, cooldowns, multi-source confirmation, and dedupe to keep false positives low.
-- **Smart NewsAPI scheduling:** Auto mode enforces cooldowns but bursts when severe official alerts or RSS surges hit (switchable to always/off).
+- **LLM-first news triage (optional):** RSS + Google News feeds are fetched, full text is extracted, and an OpenAI model classifies prepper relevance with categories and severity. Accepted items can act as confirming evidence or emit alerts directly (env‑controlled).
 
 ## Workspace-SSO Streamlit Deployment (Cloud Run + IAP)
 Turn the Streamlit dashboard into a Google Workspace–protected site:
@@ -70,6 +70,8 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
 2. Configure secrets under **Settings → Actions → Secrets and variables → Actions**:
    - `NWS_USER_AGENT`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`, `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
    - Optional: `NEWS_API_KEY`, `AIRNOW_API_KEY`, `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
+   - Optional (LLM classification): `OPENAI_API_KEY`
+   - Optional (LLM classification): `OPENAI_API_KEY`
 3. Install Python 3.11 locally, create a virtual environment, and install dependencies:
    ```bash
    python -m venv .venv
@@ -78,6 +80,13 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    ```
 4. Run the orchestration workflow locally (dry-run first):
    ```bash
+   # Optional: enable LLM-based filtering of RSS items
+   export LLM_CLASSIFY_NEWS=1
+   export OPENAI_API_KEY=sk-...      # required if enabling LLM
+   export LLM_MAX_ITEMS=10           # cap items per location (optional)
+   export LLM_MAX_CHARS=1000         # cap full-text chars per item (optional)
+   export LLM_EMIT_ALERTS=1          # emit alerts from LLM-accepted items (optional)
+   
    python -m scripts.cli rebuild-keywords
    python -m scripts.prepper_alerts --dry-run
    ```
