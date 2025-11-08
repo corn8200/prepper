@@ -4,7 +4,7 @@ Multi-location situational awareness pipeline for Harper's Ferry (home), Frederi
 
 ## Key Features
 - **Reliable automation:** GitHub Actions workflow runs every 10 minutes with concurrency control, installs Python 3.11 dependencies, rebuilds keywords, runs the orchestrator, and persists run state back into the repository when necessary using a bot identity.
-- **Configurable fusion logic:** `config/locations.yaml` is the source of truth for monitored geos; `config/settings.yaml` controls thresholds, surge detection, quotas, and toggles.
+- **Configurable fusion logic:** `config/locations.yaml` is the source of truth for monitored geos; `config/settings.yaml` controls thresholds, surge detection, and toggles.
 - **Observability-first dashboard:** Streamlit UI now includes news stack + allowlist editors, per-location overrides, CRUD for locations/settings, insight into alerts, persistent metrics, and hallway testing (dry-run, send test push) without touching CI.
 - **Alerts with guardrails:** Email/Pushover delivery layers implement severity gates, cooldowns, multi-source confirmation, and dedupe to keep false positives low.
 - **LLM-only news triage:** RSS + Google News feeds are fetched, full text is extracted, and an OpenAI model classifies prepper relevance with categories and severity. Accepted items act as confirming evidence and can emit alerts directly (env‑controlled). Third‑party news APIs are not used.
@@ -71,7 +71,6 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    - `NWS_USER_AGENT`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `ALERT_EMAIL_TO`, `PUSHOVER_USER_KEY`, `PUSHOVER_APP_TOKEN`
    - Optional: `GH_BOT_NAME`, `GH_BOT_EMAIL`, `GH_PUSH_TOKEN`
    - Required for LLM news: `OPENAI_API_KEY`
-   - Optional (LLM classification): `OPENAI_API_KEY`
 3. Install Python 3.11 locally, create a virtual environment, and install dependencies:
    ```bash
    python -m venv .venv
@@ -88,13 +87,16 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    export LLM_EMIT_ALERTS=1          # emit alerts from LLM-accepted items (optional)
    export LLM_MIN_SEVERITY=3         # only emit alerts for severity >= 3
    export LLM_CONFIRM_MIN_SEVERITY=2 # only count toward confirmation if severity >= 2
+   export LLM_ALLOW_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,severe_weather,public_health,crime"
+   export NEWS_REQUIRE_HAZARD=1      # require hazard keywords to appear in RSS items
    
    python -m scripts.cli rebuild-keywords
    python -m scripts.prepper_alerts --dry-run
    ```
 5. Launch the dashboard for config CRUD/observability:
    ```bash
-   streamlit run dashboard/app.py
+   PYTHONPATH=. python -m scripts.cli dashboard --port 8501
+   # Then open http://localhost:8501
    ```
 
 See `SECURITY.md` for coordinated disclosure guidance.

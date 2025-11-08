@@ -17,10 +17,12 @@ GOOGLE_NEWS_SEARCH = "https://news.google.com/rss/search"
 class NewsRSSClient(BaseSource):
     provider = "news_rss"
 
-    def __init__(self, rss_feeds: Iterable[str], allow_domains: Iterable[str], google_queries: Iterable[str]) -> None:
+    def __init__(self, rss_feeds: Iterable[str], allow_domains: Iterable[str], google_queries: Iterable[str], hazard_keywords: Iterable[str] | None = None) -> None:
         self.rss_feeds = list(rss_feeds)
         self.allow_domains = {domain.lower() for domain in allow_domains}
         self.google_queries = list(google_queries)
+        self.hazard_keywords = [h.lower() for h in (hazard_keywords or [])]
+        self.require_hazard = (os.getenv("NEWS_REQUIRE_HAZARD", "1").strip().lower() in {"1", "true", "yes", "on"}) and bool(self.hazard_keywords)
 
     def fetch(self, location: Dict[str, Any], keywords: Optional[Dict[str, Any]] = None) -> SourceResult:
         items: List[Dict[str, Any]] = []
@@ -79,6 +81,8 @@ class NewsRSSClient(BaseSource):
             summary = entry.get("summary", "") or ""
             haystack = f"{title} {summary}".lower()
             if geo_terms and not any(token in haystack for token in geo_terms):
+                continue
+            if self.require_hazard and not any(hz in haystack for hz in self.hazard_keywords):
                 continue
             seen.add(dedupe_key)
             results.append(

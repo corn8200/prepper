@@ -90,11 +90,16 @@ def classify_news_items(
 
     results = parsed.get("results") or []
     filtered: List[Dict[str, Any]] = []
+    allow_cats_env = os.getenv("LLM_ALLOW_CATEGORIES", "").strip()
+    allow_cats = {c.strip().lower() for c in allow_cats_env.split(",") if c.strip()} if allow_cats_env else None
     for src, res in zip(batch, results):
         try:
             if res.get("relevant") is True:
                 tagged = dict(src)
-                tagged["category"] = res.get("category") or "general"
+                cat = (res.get("category") or "general").lower()
+                if allow_cats and cat not in allow_cats:
+                    continue
+                tagged["category"] = cat
                 tagged["reason"] = res.get("reason") or ""
                 tagged["severity"] = int(res.get("severity") or 1)
                 filtered.append(tagged)

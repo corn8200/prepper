@@ -172,7 +172,12 @@ class PrepperAlertsRunner:
         return {
             "nws": NWSClient(),
             "usgs": USGSClient(),
-            "news_rss": NewsRSSClient(news_stack.rss_sources, allow_domains, news_stack.google_news_queries_per_location),
+            "news_rss": NewsRSSClient(
+                news_stack.rss_sources,
+                allow_domains,
+                news_stack.google_news_queries_per_location,
+                getattr(news_stack, "hazard_keywords", []),
+            ),
             "eonet": EONETClient(),
         }
 

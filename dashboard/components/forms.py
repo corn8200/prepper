@@ -37,14 +37,12 @@ def thresholds_form(initial: Dict, key: str = "thresholds_form") -> Optional[Dic
         st.write("Tune global surge thresholds.")
         news_spike = st.number_input("News spike factor", value=float(initial.get("news_spike_factor", 3.0)), min_value=1.0)
         news_mentions = st.number_input("News min mentions", value=int(initial.get("news_min_mentions", 3)), min_value=1)
-        wiki_spike = st.number_input("Wiki spike factor", value=float(initial.get("wiki_spike_factor", 4.0)), min_value=1.0)
         submitted = st.form_submit_button("Save thresholds")
     if submitted:
         return {
             **initial,
             "news_spike_factor": float(news_spike),
             "news_min_mentions": int(news_mentions),
-            "wiki_spike_factor": float(wiki_spike),
         }
     return None
 
@@ -63,28 +61,13 @@ def safety_form(domains: list[str], key: str = "safety_form") -> Optional[list[s
 
 def news_stack_form(initial: Dict, key: str = "news_stack_form") -> Optional[Dict]:
     with st.form(key):
-        st.write("Control RSS, Google News, and NewsAPI behavior.")
+        st.write("Control RSS sources and Google News queries.")
         rss_value = "\n".join(initial.get("rss_sources", []))
         rss_sources = st.text_area("RSS sources", value=rss_value, height=160)
         google_value = "\n".join(initial.get("google_news_queries_per_location", []))
         google_queries = st.text_area("Google News queries", value=google_value, height=160)
-        cooldown = st.number_input(
-            "NewsAPI cooldown (minutes)",
-            value=int(initial.get("quotas", {}).get("newsapi_cooldown_minutes", 30)),
-            min_value=5,
-            step=5,
-        )
-        burst = st.number_input(
-            "NewsAPI burst window (minutes)",
-            value=int(initial.get("quotas", {}).get("newsapi_burst_minutes", 60)),
-            min_value=15,
-            step=15,
-        )
-        modes = ["auto", "always", "off"]
-        current_mode = initial.get("mode", "auto")
-        if current_mode not in modes:
-            current_mode = "auto"
-        mode = st.selectbox("NewsAPI mode", options=modes, index=modes.index(current_mode))
+        hazard_value = "\n".join(initial.get("hazard_keywords", []))
+        hazard_keywords = st.text_area("Hazard keywords (prefilter)", value=hazard_value, height=120)
         require_domains = st.number_input(
             "Distinct domains required for surge",
             value=int(initial.get("surge", {}).get("require_distinct_domains", 2)),
@@ -96,12 +79,8 @@ def news_stack_form(initial: Dict, key: str = "news_stack_form") -> Optional[Dic
         return {
             "rss_sources": [line.strip() for line in rss_sources.splitlines() if line.strip()],
             "google_news_queries_per_location": [line.strip() for line in google_queries.splitlines() if line.strip()],
-            "quotas": {
-                "newsapi_cooldown_minutes": int(cooldown),
-                "newsapi_burst_minutes": int(burst),
-            },
+            "hazard_keywords": [line.strip() for line in hazard_keywords.splitlines() if line.strip()],
             "surge": {"require_distinct_domains": int(require_domains)},
-            "mode": mode,
         }
     return None
 

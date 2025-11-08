@@ -62,18 +62,12 @@ class ThresholdsConfig(BaseModel):
     nws_severity_emergency: List[str]
     news_spike_factor: float = Field(..., gt=0)
     news_min_mentions: int = Field(..., gt=0)
-    wiki_spike_factor: float = Field(..., gt=0)
 
 
 class HysteriaConfig(BaseModel):
     require_sources: int = Field(..., gt=0)
     window_minutes: int = Field(..., gt=0)
     cooldown_minutes: int = Field(..., gt=0)
-
-
-class NewsStackQuotas(BaseModel):
-    newsapi_cooldown_minutes: int = Field(..., gt=0)
-    newsapi_burst_minutes: int = Field(..., gt=0)
 
 
 class NewsStackSurge(BaseModel):
@@ -83,9 +77,8 @@ class NewsStackSurge(BaseModel):
 class NewsStackConfig(BaseModel):
     rss_sources: List[str]
     google_news_queries_per_location: List[str]
-    quotas: NewsStackQuotas
+    hazard_keywords: List[str] = Field(default_factory=list)
     surge: NewsStackSurge
-    mode: Literal["auto", "always", "off"] = "auto"
 
 
 class TestingConfig(BaseModel):

@@ -21,7 +21,6 @@ thresholds:
     - Severe
   news_spike_factor: 3.0
   news_min_mentions: 3
-  wiki_spike_factor: 4.0
 hysteria:
   require_sources: 2
   window_minutes: 120
@@ -38,12 +37,25 @@ news_stack:
     - "<CITY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "<COUNTY STATE> (evacuation|shelter-in-place|chemical|explosion|shooting|riot|hazmat|wildfire|smoke|lockdown|closure)"
     - "(I-70|I-81|US-340) (closed|shutdown|hazmat|multi-vehicle|jackknife)"
-  quotas:
-    newsapi_cooldown_minutes: 30
-    newsapi_burst_minutes: 60
+  hazard_keywords:
+    - evacuate
+    - shelter-in-place
+    - chemical
+    - explosion
+    - shooting
+    - riot
+    - hazmat
+    - wildfire
+    - smoke
+    - lockdown
+    - closure
+    - derailment
+    - water main break
+    - boil water advisory
+    - power outage
+    - grid failure
   surge:
     require_distinct_domains: 2
-  mode: auto
 per_location_overrides:
   home:
     quake_min_mag_normal: 4.0

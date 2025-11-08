@@ -31,7 +31,15 @@ class PushoverClient:
         self.user_key = user_key
         self.app_token = app_token
 
-    def send(self, payload: AlertPayload, emergency_retry: int, emergency_expire: int, dry_run: bool) -> bool:
+    def send(
+        self,
+        payload: AlertPayload,
+        emergency_retry: int,
+        emergency_expire: int,
+        dry_run: bool,
+        sound: Optional[str] = None,
+        device: Optional[str] = None,
+    ) -> bool:
         if not self.user_key or not self.app_token:
             LOGGER.info("Skipping Pushover send, missing credentials")
             return False
@@ -45,16 +53,28 @@ class PushoverClient:
             "message": payload.body,
             "priority": payload.priority,
         }
+        # Allow sound/device overrides via args or env.
+        env_sound = os.getenv("PUSHOVER_PRIORITY2_SOUND") if payload.priority == 2 else os.getenv("PUSHOVER_SOUND")
+        use_sound = sound or env_sound
+        if use_sound:
+            data["sound"] = use_sound
+        env_device = os.getenv("PUSHOVER_DEVICE")
+        use_device = device or env_device
+        if use_device:
+            data["device"] = use_device
         if payload.url:
             data["url"] = payload.url
         if payload.priority == 2:
             data["retry"] = emergency_retry
             data["expire"] = emergency_expire
         resp = requests.post(self.API_URL, data=data, timeout=10)
-        try:
-            resp.raise_for_status()
-        except requests.HTTPError as err:
-            LOGGER.error("Pushover send failed: %s", err)
+        if resp.status_code != 200:
+            detail = None
+            try:
+                detail = resp.json()
+            except Exception:
+                detail = resp.text[:500]
+            LOGGER.error("Pushover send failed: %s | detail=%s", resp.status_code, detail)
             return False
         return True
 
