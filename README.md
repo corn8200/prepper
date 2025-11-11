@@ -112,6 +112,7 @@ This gives you a private dashboard on the internet that only Workspace users can
 - **No “home” news:** expand the allowlist with more Jefferson County/Winchester/Loudoun sources or temporarily set `NEWS_REQUIRE_HAZARD=0` while tuning.
 - **NWS error 403:** your `NWS_USER_AGENT` is blank or not descriptive. Use something like `prepper-alerts/1.0 (you@example.com)`.
 - **Pushover emergency didn’t repeat:** set `PUSHOVER_EMERGENCY_RETRY/EXPIRE` in env/Actions and make sure Critical Alerts are allowed on your iPhone.
+- **Commits dated in the future:** run `python scripts/git_commit_with_real_time.py commit …` instead of `git commit`. The helper script sets `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` using a trusted UTC API (or a timestamp you provide via `--datetime`/`REAL_GIT_COMMIT_TIME`) so history reflects real-world time even when the container clock is skewed.
 
 ## Workspace-SSO Streamlit Deployment (Cloud Run + IAP)
 
