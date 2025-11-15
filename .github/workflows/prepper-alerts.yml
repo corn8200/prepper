@@ -80,7 +80,12 @@ jobs:
             git add data config/keywords.yaml
             git commit -m "chore: persist alert artifacts"
             git remote set-url origin https://x-access-token:${{ secrets.GH_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
-            git push origin HEAD:${{ github.ref_name }}
+            if git push origin HEAD:${{ github.ref_name }}; then
+              echo "::notice::Persisted alert artifacts to ${{ github.ref_name }}."
+            else
+              echo "::warning::Failed to push artifacts. Ensure GH_PUSH_TOKEN has repo write permissions."
+              exit 0
+            fi
           fi
       - name: Upload latest snapshot
         if: always()
