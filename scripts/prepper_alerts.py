@@ -166,6 +166,16 @@ class PrepperAlertsRunner:
             self.llm_confirm_min_severity = int(os.getenv("LLM_CONFIRM_MIN_SEVERITY", "2"))
         except ValueError:
             self.llm_confirm_min_severity = 2
+        # Only treat certain LLM categories as emergency (priority 2).
+        # Default is intentionally narrower than LLM_ALLOW_CATEGORIES so that
+        # forecasts like “high chance of wildfires” are non-emergency.
+        emergency_cats_env = os.getenv(
+            "LLM_EMERGENCY_CATEGORIES",
+            "evacuation,hazmat,lockdown,outage,disaster,public_health,crime",
+        ).strip()
+        self.llm_emergency_categories = {
+            c.strip().lower() for c in emergency_cats_env.split(",") if c.strip()
+        }
 
     def _build_sources(self, news_stack, allow_domains: Iterable[str]):
         return {
@@ -257,10 +267,14 @@ class PrepperAlertsRunner:
                             sev = int(i.get("severity") or 1)
                             if sev < self.llm_min_severity:
                                 continue
-                            priority = 2 if sev >= 3 else 1
+                            category = (i.get("category") or "news").lower()
+                            # Only configured categories become emergency; others (including
+                            # severe_weather / wildfire forecasts) are non-emergency.
+                            is_emergency_cat = category in self.llm_emergency_categories
+                            priority = 2 if sev >= 3 and is_emergency_cat else 1
                             title = f"[{location.id.upper()}] {i.get('title','News item')}"
                             body = normalize_ascii(i.get("content") or i.get("summary") or i.get("title") or "")
-                            reason = f"llm:{i.get('category','news')} sev={sev}; {i.get('reason','')}"
+                            reason = f"llm:{category} sev={sev}; {i.get('reason','')}"
                             decision = AlertDecision(
                                 provider="llm_news",
                                 location_id=location.id,
@@ -268,7 +282,7 @@ class PrepperAlertsRunner:
                                 body=body[:5000],
                                 priority=priority,
                                 url=i.get("link"),
-                                category="news",
+                                category=category,
                                 reason=reason,
                             )
                             self._emit_if_needed(decision)

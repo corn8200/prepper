@@ -50,6 +50,7 @@ export LLM_EMIT_ALERTS=1
 export LLM_MIN_SEVERITY=3
 export LLM_CONFIRM_MIN_SEVERITY=2
 export LLM_ALLOW_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,severe_weather,public_health,crime"
+export LLM_EMERGENCY_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,public_health,crime"
 export NEWS_REQUIRE_HAZARD=0        # let the LLM decide what’s relevant
 export PUSHOVER_PRIORITY2_SOUND=siren
 export PUSHOVER_EMERGENCY_RETRY=30
@@ -253,6 +254,7 @@ Turn the Streamlit dashboard into a Google Workspace–protected site:
    export LLM_MIN_SEVERITY=3         # only emit alerts for severity >= 3
    export LLM_CONFIRM_MIN_SEVERITY=2 # only count toward confirmation if severity >= 2
    export LLM_ALLOW_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,severe_weather,public_health,crime"
+   export LLM_EMERGENCY_CATEGORIES="evacuation,hazmat,lockdown,outage,disaster,public_health,crime"  # which LLM categories become Pushover emergency
    export NEWS_REQUIRE_HAZARD=0      # send everything to the LLM; it will filter by locality + severity
    export PUSHOVER_PRIORITY2_SOUND=siren     # optional critical sound override
    export PUSHOVER_EMERGENCY_RETRY=30        # retry every 30s for emergency alerts
