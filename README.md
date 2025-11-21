@@ -36,8 +36,10 @@ You don’t have to be a developer—think of it as a tailored warning siren you
 
 ## Quick Start (Local)
 
+> Tip: use Python 3.11/3.12 so Streamlit/pyarrow wheels install cleanly. On 3.13+, the core CLI still works but the dashboard dependencies are skipped.
+
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -113,65 +115,6 @@ This gives you a private dashboard on the internet that only Workspace users can
 - **No “home” news:** expand the allowlist with more Jefferson County/Winchester/Loudoun sources or temporarily set `NEWS_REQUIRE_HAZARD=0` while tuning.
 - **NWS error 403:** your `NWS_USER_AGENT` is blank or not descriptive. Use something like `prepper-alerts/1.0 (you@example.com)`.
 - **Pushover emergency didn’t repeat:** set `PUSHOVER_EMERGENCY_RETRY/EXPIRE` in env/Actions and make sure Critical Alerts are allowed on your iPhone.
-
-## Workspace-SSO Streamlit Deployment (Cloud Run + IAP)
-
-The detailed Cloud Run steps are preserved below for completeness.
-
-1. **Prereqs:** Install the [gcloud SDK](https://cloud.google.com/sdk/docs/install), ensure you have a Google Workspace domain plus a subdomain (e.g., `app.yourdomain.com`), and note that the entry point is `dashboard/app.py`.
-2. **Create the container image:** A `Dockerfile` (already in the repo) builds the Streamlit app for Cloud Run.
-3. **Set variables (adjust values to your org):**
-   ```bash
-   PROJECT_ID="YOUR_GCP_PROJECT_ID"
-   REGION="us-east1"
-   SERVICE="preppers-dashboard"
-   DOMAIN="app.yourdomain.com"
-   GROUP_EMAIL="dash-viewers@yourdomain.com"
-   SUPPORT_EMAIL="you@yourdomain.com"
-   ```
-4. **Authenticate + pick project/region:**
-   ```bash
-   gcloud auth login
-   gcloud config set project "$PROJECT_ID"
-   gcloud config set run/region "$REGION"
-   ```
-5. **Enable services (idempotent):**
-   ```bash
-   gcloud services enable run.googleapis.com iam.googleapis.com iap.googleapis.com \
-     secretmanager.googleapis.com cloudbuild.googleapis.com
-   ```
-6. **Build + deploy a private Cloud Run service:**
-   ```bash
-   gcloud builds submit --tag gcr.io/$PROJECT_ID/$SERVICE
-   gcloud run deploy "$SERVICE" \
-     --image gcr.io/$PROJECT_ID/$SERVICE \
-     --allow-unauthenticated=false \
-     --region "$REGION" \
-     --memory 1Gi
-   ```
-7. **Configure Identity-Aware Proxy (IAP) and Workspace auth:**
-   ```bash
-   gcloud iap oauth-brands create \
-     --application_title="Preppers Dashboard" \
-     --support_email="$SUPPORT_EMAIL" || true
-   BRAND="$(gcloud iap oauth-brands list --format='value(name)')"
-   gcloud iap oauth-clients create "$BRAND" --display_name="Preppers IAP Client" || true
-
-   gcloud iap web enable --resource-type=compute
-   gcloud iap web add-iam-policy-binding \
-     --member="group:$GROUP_EMAIL" \
-     --role="roles/iap.httpsResourceAccessor"
-   ```
-8. **Map your custom domain (creates DNS records to add at your registrar):**
-   ```bash
-   gcloud run domain-mappings create \
-     --service "$SERVICE" \
-     --domain "$DOMAIN" \
-     --region "$REGION" || true
-   ```
-9. **Update DNS:** Add the records printed by the previous step; once propagated, only members of `$GROUP_EMAIL` can reach `https://$DOMAIN` via Workspace SSO. 
-
-See `SECURITY.md` for coordinated disclosure guidance.
 
 ## Workspace-SSO Streamlit Deployment (Cloud Run + IAP)
 Turn the Streamlit dashboard into a Google Workspace–protected site:

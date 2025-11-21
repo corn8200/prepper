@@ -28,11 +28,12 @@ class USGSClient(BaseSource):
             "endtime": now.isoformat(),
         }
         start = time.perf_counter()
-        resp = requests.get(USGS_URL, params=params, timeout=20)
-        latency_ms = int((time.perf_counter() - start) * 1000)
         try:
+            resp = requests.get(USGS_URL, params=params, timeout=20)
+            latency_ms = int((time.perf_counter() - start) * 1000)
             resp.raise_for_status()
-        except requests.HTTPError as exc:
+        except requests.RequestException as exc:
+            latency_ms = int((time.perf_counter() - start) * 1000)
             return SourceResult(provider=self.provider, location_id=location["id"], ok=False, error=str(exc), latency_ms=latency_ms)
         data = resp.json()
         items = []

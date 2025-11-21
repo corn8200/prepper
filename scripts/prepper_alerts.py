@@ -204,7 +204,11 @@ class PrepperAlertsRunner:
             news_surge_active = False
             rss_items: List[Dict[str, Any]] = []
             for name, source in self.sources.items():
-                result = source.fetch(location_payload, keywords)
+                try:
+                    result = source.fetch(location_payload, keywords)
+                except Exception as exc:  # pragma: no cover - guarded by tests
+                    LOGGER.exception("Source %s failed for %s", name, location.id)
+                    result = SourceResult(provider=name, location_id=location.id, items=[], ok=False, error=str(exc), latency_ms=None)
                 self.summary.record_source(result)
                 self.metrics.record_fetch(self.summary.run_id, result)
                 if result.provider == "news_rss" and result.ok:

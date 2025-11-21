@@ -25,11 +25,12 @@ class NWSClient(BaseSource):
         }
         headers = {"User-Agent": USER_AGENT, "Accept": "application/geo+json"}
         start = time.perf_counter()
-        resp = requests.get(API_URL, params=params, headers=headers, timeout=20)
-        latency_ms = int((time.perf_counter() - start) * 1000)
         try:
+            resp = requests.get(API_URL, params=params, headers=headers, timeout=20)
+            latency_ms = int((time.perf_counter() - start) * 1000)
             resp.raise_for_status()
-        except requests.HTTPError as exc:
+        except requests.RequestException as exc:
+            latency_ms = int((time.perf_counter() - start) * 1000)
             return SourceResult(provider=self.provider, location_id=location["id"], ok=False, error=str(exc), latency_ms=latency_ms)
         data = resp.json()
         items = []

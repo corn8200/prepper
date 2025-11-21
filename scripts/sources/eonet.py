@@ -18,10 +18,13 @@ class EONETClient(BaseSource):
     def fetch(self, location: Dict[str, Any], keywords: Optional[Dict[str, Any]] = None) -> SourceResult:
         params = {"status": "open", "category": "wildfires"}
         start = time.perf_counter()
-        resp = requests.get(EONET_URL, params=params, timeout=20)
-        latency_ms = int((time.perf_counter() - start) * 1000)
-        if resp.status_code != 200:
-            return SourceResult(provider=self.provider, location_id=location["id"], ok=False, error=str(resp.text), latency_ms=latency_ms)
+        try:
+            resp = requests.get(EONET_URL, params=params, timeout=20)
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            latency_ms = int((time.perf_counter() - start) * 1000)
+            return SourceResult(provider=self.provider, location_id=location["id"], ok=False, error=str(exc), latency_ms=latency_ms)
         data = resp.json()
         events = []
         for event in data.get("events", []):

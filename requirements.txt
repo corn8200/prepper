@@ -1,25 +1,17 @@
 requests
 PyYAML
-pydantic
-pytz
-pandas
-plotly
-rich
-streamlit
 click
-sqlite-utils
-tenacity
 feedparser
-rapidfuzz
+pydantic[email]
 tldextract
 geopy
-pydantic[email]
-python-dateutil
-structlog
-httpx
-pytest
-ruff
 beautifulsoup4
 readability-lxml
 lxml
 openai
+pytest
+# Dashboard/optional UI deps prefer Python 3.11/3.12 where wheels exist
+pandas>=2.2,<3; python_version<'3.13'
+plotly==6.5.0; python_version<'3.13'
+streamlit==1.51.0; python_version<'3.13'
+pyarrow==15.0.2; python_version<'3.13'
