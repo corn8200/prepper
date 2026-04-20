@@ -1,0 +1,4 @@
+have_fun: false
+code_review:
+  disable: true
+  comment_severity_threshold: CRITICAL
